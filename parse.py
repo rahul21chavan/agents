@@ -1,7 +1,7 @@
 import uuid
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Any
 
 from agents.utils.sas_chunker_v2 import chunk_sas_code_v3, save_chunks_to_csv
 from lark import Lark, Transformer, UnexpectedInput
@@ -92,9 +92,8 @@ transformer = SASNodeTransformer()
 class ASTBlock:
     id: str
     type: str
-    ast: Optional[Any]
     code: str
-    error: Optional[str] = None
+    ast: Optional[Any] = None
 
 def parse_node(state: dict) -> dict:
     logging.info("🔍 Starting Parse Node")
@@ -104,28 +103,29 @@ def parse_node(state: dict) -> dict:
     parsed_blocks: List[ASTBlock] = []
 
     for chunk in raw_chunks:
+        block_type = chunk["type"].upper()
         try:
             tree = parser.parse(chunk["code"])
             ast = transformer.transform(tree)
             block = ASTBlock(
                 id=chunk["id"],
-                type=chunk["type"].upper(),
-                ast=ast,
-                code=chunk["code"]
+                type=block_type,
+                code=chunk["code"],
+                ast=ast
             )
-            logging.info(f"✅ Parsed block {block.id} ({block.type})")
-        except UnexpectedInput as e:
-            logging.error(f"❌ Failed parsing chunk {chunk['id']}: {str(e)}")
+        except UnexpectedInput:
             block = ASTBlock(
                 id=chunk["id"],
-                type="UNKNOWN",
-                ast=None,
-                code=chunk["code"],
-                error=str(e)
+                type=block_type,
+                code=chunk["code"]
             )
         parsed_blocks.append(block)
 
-    save_chunks_to_csv([b.__dict__ for b in parsed_blocks], "ast_blocks_latest.csv")
+    save_chunks_to_csv([{
+        "id": b.id,
+        "type": b.type,
+        "code": b.code
+    } for b in parsed_blocks], "ast_blocks_latest.csv")
 
     return {
         **state,
