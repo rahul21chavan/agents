@@ -1,5 +1,3 @@
-# backend/agents/parse_agent_enhanced.py
-
 import uuid
 import logging
 from dataclasses import dataclass
@@ -8,10 +6,8 @@ from typing import List, Optional, Dict, Any
 from agents.utils.sas_chunker_v2 import chunk_sas_code_v3, save_chunks_to_csv
 from lark import Lark, Transformer, UnexpectedInput
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-# Enhanced SAS Grammar
 grammar = """
     ?start: block+
 
@@ -42,9 +38,7 @@ grammar = """
     %ignore WS
 """
 
-# Parser and Transformer
 parser = Lark(grammar, start="start", parser="lalr")
-
 
 class SASNodeTransformer(Transformer):
     def macro(self, children):
@@ -92,9 +86,7 @@ class SASNodeTransformer(Transformer):
     def STRING(self, token):
         return str(token).strip('"')
 
-
 transformer = SASNodeTransformer()
-
 
 @dataclass
 class ASTBlock:
@@ -103,7 +95,6 @@ class ASTBlock:
     ast: Optional[Any]
     code: str
     error: Optional[str] = None
-
 
 def parse_node(state: dict) -> dict:
     logging.info("🔍 Starting Parse Node")
@@ -134,7 +125,6 @@ def parse_node(state: dict) -> dict:
             )
         parsed_blocks.append(block)
 
-    # Optional: Save to CSV or JSON
     save_chunks_to_csv([b.__dict__ for b in parsed_blocks], "ast_blocks_latest.csv")
 
     return {
