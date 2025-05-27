@@ -11,7 +11,7 @@ from lark import Lark, Transformer, UnexpectedInput
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-# SAS Grammar - Extended
+# Enhanced SAS Grammar
 grammar = """
     ?start: block+
 
@@ -26,10 +26,15 @@ grammar = """
     loop: "do" "while" "(" condition ")" ";" statement* "end" ";"
     comment: "*" /[^;]+/ ";"
 
+    statement: (assign_stmt | type_decl_stmt | general_stmt) ";"
+
+    assign_stmt: NAME "=" expression
+    type_decl_stmt: (("length" | "attrib" | "format") /[^;]+/)
+    general_stmt: /[^;]+/
+
     NAME: /[a-zA-Z_][a-zA-Z0-9_]*/
     STRING: /"[^"]*"/
     condition: expression
-    statement: /[^;]+/ ";"
     expression: /[^;]+/
 
     %import common.NUMBER
@@ -40,21 +45,56 @@ grammar = """
 # Parser and Transformer
 parser = Lark(grammar, start="start", parser="lalr")
 
+
 class SASNodeTransformer(Transformer):
-    def macro(self, children): return {"type": "MACRO", "name": children[1], "blocks": children[2:-2]}
-    def datastep(self, children): return {"type": "DATASTEP", "name": children[1], "statements": children[2:-2]}
-    def proc(self, children): return {"type": "PROC", "name": children[1], "statements": children[2:-2]}
-    def libname(self, children): return {"type": "LIBNAME", "lib": children[1], "path": children[2]}
-    def include(self, children): return {"type": "INCLUDE", "file": children[1]}
-    def conditional(self, children): return {"type": "IF", "condition": children[1], "statements": children[2:-1]}
-    def loop(self, children): return {"type": "LOOP", "condition": children[2], "statements": children[4:-2]}
-    def comment(self, children): return {"type": "COMMENT", "text": children[0].strip()}
-    def statement(self, children): return children[0]
-    def expression(self, children): return children[0]
-    def NAME(self, token): return str(token)
-    def STRING(self, token): return str(token).strip('"')
+    def macro(self, children):
+        return {"type": "MACRO", "name": children[1], "blocks": children[2:-2]}
+
+    def datastep(self, children):
+        return {"type": "DATASTEP", "name": children[1], "statements": children[2:]}
+
+    def proc(self, children):
+        return {"type": "PROC", "name": children[1], "statements": children[2:]}
+
+    def libname(self, children):
+        return {"type": "LIBNAME", "lib": children[1], "path": children[2]}
+
+    def include(self, children):
+        return {"type": "INCLUDE", "file": children[1]}
+
+    def conditional(self, children):
+        return {"type": "IF", "condition": children[1], "statements": children[2:-1]}
+
+    def loop(self, children):
+        return {"type": "LOOP", "condition": children[2], "statements": children[4:-2]}
+
+    def comment(self, children):
+        return {"type": "COMMENT", "text": children[0].strip()}
+
+    def assign_stmt(self, children):
+        return {"type": "ASSIGN", "var": children[0], "value": children[1]}
+
+    def type_decl_stmt(self, children):
+        return {"type": "DECLARATION", "raw": str(children[0])}
+
+    def general_stmt(self, children):
+        return {"type": "STATEMENT", "raw": str(children[0])}
+
+    def statement(self, children):
+        return children[0]
+
+    def expression(self, children):
+        return children[0]
+
+    def NAME(self, token):
+        return str(token)
+
+    def STRING(self, token):
+        return str(token).strip('"')
+
 
 transformer = SASNodeTransformer()
+
 
 @dataclass
 class ASTBlock:
@@ -63,6 +103,7 @@ class ASTBlock:
     ast: Optional[Any]
     code: str
     error: Optional[str] = None
+
 
 def parse_node(state: dict) -> dict:
     logging.info("🔍 Starting Parse Node")
