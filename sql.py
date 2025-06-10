@@ -1,30 +1,30 @@
 import streamlit as st
 import os
 import re
-from dotenv import load_dotenv
-import google.generativeai as genai
 import time
+import openai
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Configure Gemini API
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+# Configure OpenAI API
+if OPENAI_API_KEY:
+    openai.api_key = OPENAI_API_KEY
 else:
-    st.error("Gemini API key not found. Please set GEMINI_API_KEY in your .env file.")
+    st.error("OpenAI API key not found. Please set OPENAI_API_KEY in your .env file.")
     st.stop()
 
 # Streamlit page config
 st.set_page_config(page_title="PL/SQL to PySpark Converter", layout="centered")
-st.title("🔄 PL/SQL ➡️ PySpark Converter")
+st.title("🔄 PL/SQL ➡️ PySpark Converter (via OpenAI)")
 
 st.markdown("""
 This app allows you to:
 1. Upload a PL/SQL `.sql` file.
 2. Parse the code into blocks.
-3. Automatically convert each block to PySpark using Gemini API.
+3. Automatically convert each block to PySpark using OpenAI API.
 4. View and download the converted PySpark script.
 """)
 
@@ -37,38 +37,38 @@ if uploaded_file:
 
     # --- Step 1: Parse PL/SQL Code ---
     def parse_sql_into_blocks(code: str):
-        """
-        Splits the input SQL code into logical blocks using semicolon and line-based heuristics.
-        """
         raw_blocks = [block.strip() for block in code.split(";") if block.strip()]
         cleaned_blocks = []
         for block in raw_blocks:
-            # Optional: clean multi-line comments
-            block = re.sub(r"/\*.*?\*/", "", block, flags=re.DOTALL)
-            # Optional: remove inline comments
-            block = re.sub(r"--.*", "", block)
+            block = re.sub(r"/\*.*?\*/", "", block, flags=re.DOTALL)  # Remove block comments
+            block = re.sub(r"--.*", "", block)  # Remove line comments
             cleaned_blocks.append(block.strip())
         return cleaned_blocks
 
-    # --- Step 2: Use Gemini to convert each block ---
-    def convert_block_to_pyspark_with_gemini(block: str):
+    # --- Step 2: Convert each block with OpenAI ---
+    def convert_block_to_pyspark_with_openai(block: str):
         try:
-            model = genai.GenerativeModel("gemini-pro")
             prompt = f"""
-You are a code assistant. Convert the following PL/SQL code to PySpark (Python) code.
-Maintain equivalent logic and comment on important translations.
+You are a data engineer. Convert the following PL/SQL code block into equivalent PySpark (Python) code. Maintain the logic and structure as closely as possible. Comment important translations.
 
-PL/SQL:
+PL/SQL Code:
 {block}
 
-# Begin PySpark equivalent code:
+# Begin PySpark Code:
 """
-            response = model.generate_content(prompt)
-            return response.text.strip()
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that converts PL/SQL code to PySpark code."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3
+            )
+            return response['choices'][0]['message']['content'].strip()
         except Exception as e:
-            return f"# Error converting block:\n# {str(e)}"
+            return f"# Error: {e}"
 
-    # --- Step 3: Convert ---
+    # --- Step 3: Conversion ---
     st.subheader("🔍 Parsing PL/SQL Code into Blocks...")
     blocks = parse_sql_into_blocks(plsql_code)
 
@@ -84,14 +84,14 @@ PL/SQL:
         with st.expander(f"🔹 Original Block {i+1}", expanded=False):
             st.code(block, language="sql")
 
-        converted = convert_block_to_pyspark_with_gemini(block)
+        converted = convert_block_to_pyspark_with_openai(block)
         converted_blocks.append(converted)
 
         with st.expander(f"🟩 Converted Block {i+1} (PySpark)", expanded=False):
             st.code(converted, language="python")
 
         progress_bar.progress((i + 1) / len(blocks))
-        time.sleep(0.5)  # Just for effect
+        time.sleep(0.5)  # Optional delay for UX
 
     final_output = "\n\n".join(converted_blocks)
 
@@ -106,6 +106,6 @@ PL/SQL:
 
     st.success("🎉 Conversion completed successfully!")
 
-# Footer note
+# Footer
 st.markdown("---")
-st.info("Gemini API key is loaded from `.env`. Ensure it is named `GEMINI_API_KEY`.")
+st.info("OpenAI API key is loaded from `.env`. Ensure it is named `OPENAI_API_KEY`.")
